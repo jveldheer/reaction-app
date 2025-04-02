@@ -82,11 +82,13 @@
     }
 
     function scheduleClap(endTime) {
-      if (Date.now() < endTime) {
-        const randomDelay = Math.random() * 2900 + 100;
+      if (Date.now() < endTime - 500) {
+        const randomDelay = Math.random() * 2500 + 500; // 0.5s to 3s
         setTimeout(() => {
-          playClap();
-          scheduleClap(endTime);
+          if (Date.now() < endTime - 200) {
+            playClap();
+            scheduleClap(endTime);
+          }
         }, randomDelay);
       }
     }
@@ -113,7 +115,7 @@
           setTimeout(countdown, 1000);
         } else {
           countdownElement.innerText = "Go!";
-          playClap();
+          playClap(); // First immediate clap after countdown
           setTimeout(() => {
             const drillEndTime = Date.now() + totalDuration;
             scheduleClap(drillEndTime);
