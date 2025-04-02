@@ -1,0 +1,143 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2575.4">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">&lt;!DOCTYPE html&gt;</p>
+<p class="p1">&lt;html&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;title&gt;Reaction Drill&lt;/title&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;style&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>body {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-family: sans-serif;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 20px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>text-align: center;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>input, button {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-size: 1.2em;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 10px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>margin: 5px;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>#countdown {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-size: 3em;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>margin-top: 20px;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/style&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;h1&gt;Reaction Drill&lt;/h1&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;label for="duration"&gt;Training Duration (seconds):&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;input type="number" id="duration" min="1" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;button id="startButton"&gt;Start Drill&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;div id="countdown"&gt;&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;script&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>// Create or resume the AudioContext (required for mobile devices)</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const audioContext = new (window.AudioContext || window.webkitAudioContext)();</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// Function to play a beep tone (used in the countdown)</p>
+<p class="p1"><span class="Apple-converted-space">    </span>function beep(duration, frequency, volume, type) {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const oscillator = audioContext.createOscillator();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const gainNode = audioContext.createGain();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>oscillator.connect(gainNode);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>gainNode.connect(audioContext.destination);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>oscillator.frequency.value = frequency || 1000;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>oscillator.type = type || "sine";</p>
+<p class="p1"><span class="Apple-converted-space">      </span>gainNode.gain.value = volume || 1;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>oscillator.start();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>setTimeout(() =&gt; oscillator.stop(), duration);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// Function to play a simple clapping sound using white noise and an envelope</p>
+<p class="p1"><span class="Apple-converted-space">    </span>function playClap() {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const ctx = audioContext;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const bufferDuration = 0.2; // seconds</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const bufferSize = ctx.sampleRate * bufferDuration;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const data = buffer.getChannelData(0);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>for (let i = 0; i &lt; bufferSize; i++) {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>data[i] = Math.random() * 2 - 1;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const noiseSource = ctx.createBufferSource();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>noiseSource.buffer = buffer;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>const gainNode = ctx.createGain();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>// Set an envelope for a quick decay</p>
+<p class="p1"><span class="Apple-converted-space">      </span>gainNode.gain.setValueAtTime(1, ctx.currentTime);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + bufferDuration);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>noiseSource.connect(gainNode);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>gainNode.connect(ctx.destination);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>noiseSource.start();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// Recursive function to schedule clapping sounds until the drill duration is over</p>
+<p class="p1"><span class="Apple-converted-space">    </span>function scheduleClap(endTime) {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if (Date.now() &lt; endTime) {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const randomDelay = Math.random() * 2000 + 1000; // 1000ms to 3000ms</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setTimeout(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">          </span>playClap();</p>
+<p class="p1"><span class="Apple-converted-space">          </span>scheduleClap(endTime);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}, randomDelay);</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>// Start button event listener</p>
+<p class="p1"><span class="Apple-converted-space">    </span>document.getElementById('startButton').addEventListener('click', () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>// Resume AudioContext on user interaction (needed on many mobile devices)</p>
+<p class="p1"><span class="Apple-converted-space">      </span>audioContext.resume();</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const durationInput = document.getElementById('duration');</p>
+<p class="p1"><span class="Apple-converted-space">      </span>const totalDuration = parseInt(durationInput.value) * 1000; // convert seconds to ms</p>
+<p class="p1"><span class="Apple-converted-space">      </span>if (isNaN(totalDuration) || totalDuration &lt;= 0) {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>alert('Please enter a valid duration in seconds.');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>return;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>// Disable controls during the drill</p>
+<p class="p1"><span class="Apple-converted-space">      </span>durationInput.disabled = true;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>document.getElementById('startButton').disabled = true;</p>
+<p class="p2"><span class="Apple-converted-space">      </span></p>
+<p class="p1"><span class="Apple-converted-space">      </span>const countdownElement = document.getElementById('countdown');</p>
+<p class="p1"><span class="Apple-converted-space">      </span>let count = 3;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">      </span>// Countdown function with beeps each second</p>
+<p class="p1"><span class="Apple-converted-space">      </span>function countdown() {</p>
+<p class="p1"><span class="Apple-converted-space">        </span>if (count &gt; 0) {</p>
+<p class="p1"><span class="Apple-converted-space">          </span>countdownElement.innerText = count;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>beep(200, 1000, 1, "sine");</p>
+<p class="p1"><span class="Apple-converted-space">          </span>count--;</p>
+<p class="p1"><span class="Apple-converted-space">          </span>setTimeout(countdown, 1000);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">          </span>countdownElement.innerText = "Go!";</p>
+<p class="p1"><span class="Apple-converted-space">          </span>setTimeout(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>// Start the clapping drill</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const drillEndTime = Date.now() + totalDuration;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>scheduleClap(drillEndTime);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>countdownElement.innerText = ""; // Clear the countdown display</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// Re-enable controls after the drill ends</p>
+<p class="p1"><span class="Apple-converted-space">            </span>setTimeout(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">              </span>durationInput.disabled = false;</p>
+<p class="p1"><span class="Apple-converted-space">              </span>document.getElementById('startButton').disabled = false;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}, totalDuration);</p>
+<p class="p1"><span class="Apple-converted-space">          </span>}, 500);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">      </span>}</p>
+<p class="p2"><span class="Apple-converted-space">      </span></p>
+<p class="p1"><span class="Apple-converted-space">      </span>countdown();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>});</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/script&gt;</p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
+</body>
+</html>
