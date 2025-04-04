@@ -23,17 +23,10 @@
       height: auto;
       margin-bottom: 15px;
     }
-    #soundToggle {
-      font-size: 2em;
-      cursor: pointer;
-      margin-bottom: 20px;
-      user-select: none;
-    }
   </style>
 </head>
 <body>
   <img src="vlvl16x9.png" alt="VLVL Logo" class="logo" />
-  <div id="soundToggle">🔇</div>
   <h1>Reaction Drill</h1>
   <label for="duration">Training Duration (seconds):</label>
   <input type="number" id="duration" min="1" />
@@ -42,18 +35,8 @@
 
   <script>
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    let soundEnabled = false;
-
-    const soundToggle = document.getElementById("soundToggle");
-    soundToggle.addEventListener("click", () => {
-      audioContext.resume().then(() => {
-        soundEnabled = !soundEnabled;
-        soundToggle.innerText = soundEnabled ? "🔊" : "🔇";
-      });
-    });
 
     function beep(duration, frequency, volume, type) {
-      if (!soundEnabled) return;
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       oscillator.connect(gainNode);
@@ -62,11 +45,10 @@
       oscillator.type = type || "sine";
       gainNode.gain.value = volume || 1;
       oscillator.start();
-      setTimeout(() => oscillator.stop(), duration);
+      oscillator.stop(audioContext.currentTime + duration / 1000);
     }
 
     function playClap() {
-      if (!soundEnabled) return;
       const ctx = audioContext;
       const bufferDuration = 0.2;
       const bufferSize = ctx.sampleRate * bufferDuration;
@@ -88,7 +70,6 @@
     }
 
     function playBuzzer() {
-      if (!soundEnabled) return;
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       oscillator.connect(gainNode);
@@ -113,42 +94,44 @@
     }
 
     document.getElementById('startButton').addEventListener('click', () => {
-      const durationInput = document.getElementById('duration');
-      const totalDuration = parseInt(durationInput.value) * 1000;
-      if (isNaN(totalDuration) || totalDuration <= 0) {
-        alert('Please enter a valid duration in seconds.');
-        return;
-      }
-
-      durationInput.disabled = true;
-      document.getElementById('startButton').disabled = true;
-      const countdownElement = document.getElementById('countdown');
-      let count = 3;
-
-      function countdown() {
-        if (count > 0) {
-          countdownElement.innerText = count;
-          beep(200, 1000, 1, "sine");
-          count--;
-          setTimeout(countdown, 1000);
-        } else {
-          countdownElement.innerText = "Go!";
-          playClap(); // Immediate first clap
-          setTimeout(() => {
-            const drillEndTime = Date.now() + totalDuration;
-            scheduleClap(drillEndTime);
-            countdownElement.innerText = "";
-
-            setTimeout(() => {
-              playBuzzer();
-              durationInput.disabled = false;
-              document.getElementById('startButton').disabled = false;
-            }, totalDuration);
-          }, 300);
+      audioContext.resume().then(() => {
+        const durationInput = document.getElementById('duration');
+        const totalDuration = parseInt(durationInput.value) * 1000;
+        if (isNaN(totalDuration) || totalDuration <= 0) {
+          alert('Please enter a valid duration in seconds.');
+          return;
         }
-      }
 
-      countdown();
+        durationInput.disabled = true;
+        document.getElementById('startButton').disabled = true;
+        const countdownElement = document.getElementById('countdown');
+        let count = 3;
+
+        function countdown() {
+          if (count > 0) {
+            countdownElement.innerText = count;
+            beep(200, 1000, 1, "sine");
+            count--;
+            setTimeout(countdown, 1000);
+          } else {
+            countdownElement.innerText = "Go!";
+            playClap(); // First clap
+            setTimeout(() => {
+              const drillEndTime = Date.now() + totalDuration;
+              scheduleClap(drillEndTime);
+              countdownElement.innerText = "";
+
+              setTimeout(() => {
+                playBuzzer();
+                durationInput.disabled = false;
+                document.getElementById('startButton').disabled = false;
+              }, totalDuration);
+            }, 300);
+          }
+        }
+
+        countdown();
+      });
     });
   </script>
 </body>
