@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reaction Drill</title>
@@ -9,10 +9,16 @@
       padding: 20px;
       text-align: center;
     }
+    #landing, #app {
+      display: none;
+    }
+    #landing.active, #app.active {
+      display: block;
+    }
     input, button {
       font-size: 1.2em;
-      padding: 10px;
-      margin: 5px;
+      padding: 10px 20px;
+      margin: 10px;
     }
     #countdown {
       font-size: 3em;
@@ -23,27 +29,47 @@
       height: auto;
       margin-bottom: 15px;
     }
+    .primary-button {
+      background-color: black;
+      color: white;
+      border: none;
+      font-size: 1.2em;
+      padding: 15px 30px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
   </style>
 </head>
 <body>
-  <img src="vlvl16x9.png" alt="VLVL Logo" class="logo" />
-  <h1>Reaction Drill</h1>
-  <label for="duration">Training Duration (seconds):</label>
-  <input type="number" id="duration" min="1" />
-  <button id="startButton">Start Drill</button>
-  <div id="countdown"></div>
+
+  <!-- Landing Page -->
+  <div id="landing" class="active">
+    <img src="vlvl16x9.png" alt="VLVL Logo" class="logo" />
+    <h2>Enter the Reaction Timer App</h2>
+    <button class="primary-button" id="enterAppBtn">Enter the Reaction Timer App</button>
+  </div>
+
+  <!-- Main App -->
+  <div id="app">
+    <img src="vlvl16x9.png" alt="VLVL Logo" class="logo" />
+    <h1>Reaction Drill</h1>
+    <label for="duration">Training Duration (seconds):</label>
+    <input type="number" id="duration" min="1" />
+    <button id="startButton" class="primary-button">Start Drill</button>
+    <div id="countdown"></div>
+  </div>
 
   <script>
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-    function beep(duration, frequency, volume, type) {
+    function beep(duration = 200, frequency = 1000, volume = 1, type = "sine") {
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
-      oscillator.frequency.value = frequency || 1000;
-      oscillator.type = type || "sine";
-      gainNode.gain.value = volume || 1;
+      oscillator.frequency.value = frequency;
+      oscillator.type = type;
+      gainNode.gain.value = volume;
       oscillator.start();
       oscillator.stop(audioContext.currentTime + duration / 1000);
     }
@@ -83,7 +109,7 @@
 
     function scheduleClap(endTime) {
       if (Date.now() < endTime - 500) {
-        const randomDelay = Math.random() * 2500 + 500; // 0.5s to 3s
+        const randomDelay = Math.random() * 2500 + 500;
         setTimeout(() => {
           if (Date.now() < endTime - 200) {
             playClap();
@@ -93,45 +119,50 @@
       }
     }
 
-    document.getElementById('startButton').addEventListener('click', () => {
+    document.getElementById("enterAppBtn").addEventListener("click", () => {
       audioContext.resume().then(() => {
-        const durationInput = document.getElementById('duration');
-        const totalDuration = parseInt(durationInput.value) * 1000;
-        if (isNaN(totalDuration) || totalDuration <= 0) {
-          alert('Please enter a valid duration in seconds.');
-          return;
-        }
-
-        durationInput.disabled = true;
-        document.getElementById('startButton').disabled = true;
-        const countdownElement = document.getElementById('countdown');
-        let count = 3;
-
-        function countdown() {
-          if (count > 0) {
-            countdownElement.innerText = count;
-            beep(200, 1000, 1, "sine");
-            count--;
-            setTimeout(countdown, 1000);
-          } else {
-            countdownElement.innerText = "Go!";
-            playClap(); // First clap
-            setTimeout(() => {
-              const drillEndTime = Date.now() + totalDuration;
-              scheduleClap(drillEndTime);
-              countdownElement.innerText = "";
-
-              setTimeout(() => {
-                playBuzzer();
-                durationInput.disabled = false;
-                document.getElementById('startButton').disabled = false;
-              }, totalDuration);
-            }, 300);
-          }
-        }
-
-        countdown();
+        beep(); // test beep to confirm unlock
+        document.getElementById("landing").classList.remove("active");
+        document.getElementById("app").classList.add("active");
       });
+    });
+
+    document.getElementById("startButton").addEventListener("click", () => {
+      const durationInput = document.getElementById("duration");
+      const totalDuration = parseInt(durationInput.value) * 1000;
+      if (isNaN(totalDuration) || totalDuration <= 0) {
+        alert("Please enter a valid duration in seconds.");
+        return;
+      }
+
+      durationInput.disabled = true;
+      document.getElementById("startButton").disabled = true;
+      const countdownElement = document.getElementById("countdown");
+      let count = 3;
+
+      function countdown() {
+        if (count > 0) {
+          countdownElement.innerText = count;
+          beep();
+          count--;
+          setTimeout(countdown, 1000);
+        } else {
+          countdownElement.innerText = "Go!";
+          playClap();
+          setTimeout(() => {
+            const drillEndTime = Date.now() + totalDuration;
+            scheduleClap(drillEndTime);
+            countdownElement.innerText = "";
+            setTimeout(() => {
+              playBuzzer();
+              durationInput.disabled = false;
+              document.getElementById("startButton").disabled = false;
+            }, totalDuration);
+          }, 300);
+        }
+      }
+
+      countdown();
     });
   </script>
 </body>
