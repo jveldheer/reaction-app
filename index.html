@@ -23,6 +23,19 @@
       height: auto;
       margin-bottom: 15px;
     }
+    #ringerAlert {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: #ff4444;
+      color: white;
+      font-weight: bold;
+      padding: 12px;
+      text-align: center;
+      font-size: 1em;
+      z-index: 999;
+    }
   </style>
 </head>
 <body>
@@ -32,6 +45,11 @@
   <input type="number" id="duration" min="1" />
   <button id="startButton">Start Drill</button>
   <div id="countdown"></div>
+
+  <!-- Ringer Alert Bar -->
+  <div id="ringerAlert">
+    🔈 Make sure your device's Ringer is set to ON
+  </div>
 
   <script>
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
