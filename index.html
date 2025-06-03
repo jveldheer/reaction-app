@@ -5,17 +5,17 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Audible Reaction Timers</title>
 <style>
-  :root { --btn:#000; --btnText:#fff; --warn:#ff4444; }
+  :root { --btn:#000; --txt:#fff; --warn:#ff4444; }
   body  { font-family:sans-serif; text-align:center; padding:20px; }
   section      { display:none; }
   section.show { display:block; }
   img.logo     { max-width:200px; margin-bottom:15px; }
   button,input { font-size:1.1em; padding:12px 22px; margin:8px; border:none; border-radius:6px; }
-  .primary     { background:var(--btn); color:var(--btnText); cursor:pointer; }
-  #duration    { border:2px solid #000; width:150px; text-align:center; }
+  .primary     { background:var(--btn); color:var(--txt); cursor:pointer; }
+  #duration    { border:3px solid #000; width:160px; text-align:center; }
   #countdown   { font-size:3em; margin-top:20px; }
-  #ringerBar   { position:fixed; bottom:0; left:0; width:100%; background:var(--warn);
-                 color:#fff; font-weight:bold; padding:10px; z-index:999; }
+  #ringerBar   {position:fixed;bottom:0;left:0;width:100%;background:var(--warn);
+                color:#fff;font-weight:bold;padding:10px;z-index:10;}
 </style>
 </head>
 <body>
@@ -44,62 +44,88 @@
 <div id="ringerBar">🔈 Make sure your device's Ringer is set to ON</div>
 
 <script>
-/* --------- constants & refs --------- */
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-const synth    = window.speechSynthesis;
-
-const landing   = document.getElementById('landing');
-const timerPage = document.getElementById('timer');
-const titleEl   = document.getElementById('title');
-const durEl     = document.getElementById('duration');
-const startBtn  = document.getElementById('startBtn');
-const backBtn   = document.getElementById('backBtn');
-const countEl   = document.getElementById('countdown');
+/* ===================== basic refs & audio ===================== */
+const landing   = document.getElementById('landing'),
+      timerPg   = document.getElementById('timer'),
+      titleEl   = document.getElementById('title'),
+      durEl     = document.getElementById('duration'),
+      startBtn  = document.getElementById('startBtn'),
+      backBtn   = document.getElementById('backBtn'),
+      countEl   = document.getElementById('countdown');
 
 let mode='', lastVal=null;
+const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+const synth    = window.speechSynthesis;
 
-/* --------- UI helpers --------- */
-const show = el => el.classList.add('show');
-const hide = el => el.classList.remove('show');
+/* tiny fallback MP3s (free, CC0) -------------------------------- */
+const numMP3 = [
+  'https://cdn.jsdelivr.net/gh/ageitgey/speech_datasets@master/mini_numbers/1.mp3',
+  'https://cdn.jsdelivr.net/gh/ageitgey/speech_datasets@master/mini_numbers/2.mp3',
+  'https://cdn.jsdelivr.net/gh/ageitgey/speech_datasets@master/mini_numbers/3.mp3',
+  'https://cdn.jsdelivr.net/gh/ageitgey/speech_datasets@master/mini_numbers/4.mp3',
+  'https://cdn.jsdelivr.net/gh/ageitgey/speech_datasets@master/mini_numbers/5.mp3'
+];
+const dirMP3 = {
+  right:'https://cdn.jsdelivr.net/gh/jvns/speech-samples@master/right.mp3',
+  left :'https://cdn.jsdelivr.net/gh/jvns/speech-samples@master/left.mp3',
+  back :'https://cdn.jsdelivr.net/gh/jvns/speech-samples@master/back.mp3',
+  forward:'https://cdn.jsdelivr.net/gh/jvns/speech-samples@master/forward.mp3'
+};
+const audioCache={};
+Object.values(dirMP3).concat(numMP3).forEach(src=>{
+  const a=new Audio(src); a.preload='auto'; audioCache[src]=a;
+});
 
-/* --------- simple audio helpers --------- */
-const playTone = (f=1000,d=200,t='sine') =>{
-  const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+/* helpers ------------------------------------------------------- */
+const show = s=>s.classList.add('show'), hide=s=>s.classList.remove('show');
+
+const playTone=(f=1000,d=200,t='sine')=>{
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
   o.type=t; o.frequency.value=f; o.connect(g); g.connect(audioCtx.destination);
   g.gain.setValueAtTime(1,audioCtx.currentTime);
   o.start(); o.stop(audioCtx.currentTime+d/1000);
 };
-const playClap = () =>{
-  const len=audioCtx.sampleRate*0.15, buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
-  const data=buf.getChannelData(0);
-  for(let i=0;i<len;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
+const clap=()=>{
+  const len=audioCtx.sampleRate*0.15,buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+  const data=buf.getChannelData(0); for(let i=0;i<len;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
   const src=audioCtx.createBufferSource(); src.buffer=buf; src.connect(audioCtx.destination); src.start();
 };
 
-/* --------- robust speech (EN) --------- */
-function speakEN(text){
-  const speakNow = ()=>{
-    const u=new SpeechSynthesisUtterance(text);
-    u.lang='en-US';         // ensure English
-    u.volume=1; u.rate=1; u.pitch=1;
-    synth.cancel();
-    // tiny timeout avoids some Chrome race conditions
-    setTimeout(()=>synth.speak(u),0);
-  };
+/* guaranteed English speech w/ fallback mp3 --------------------- */
+function speak(text){
+  return new Promise(res=>{
+    let spoke=false, mp3Played=false;
+    /* use Web Speech */
+    const utter=new SpeechSynthesisUtterance(text);
+    utter.lang='en-US'; utter.volume=1; utter.rate=1; utter.pitch=1;
+    utter.onend=()=>{ spoke=true; if(!mp3Played) res(); };
+    /* voice load */
+    const voicesLoaded = ()=>synth.getVoices().length;
+    const say=()=>{
+      synth.cancel(); setTimeout(()=>{ synth.speak(utter); },0);
+    };
+    if(!voicesLoaded()){
+      synth.addEventListener('voiceschanged', say,{once:true});
+      synth.getVoices();
+    } else say();
 
-  // wait until at least one voice exists (max 2 s)
-  if(!synth.getVoices().length){
-    let waited=0;
-    const iv=setInterval(()=>{
-      if(synth.getVoices().length || waited>20){
-        clearInterval(iv); speakNow();
+    /* fallback to mp3 if no onend after 500 ms */
+    setTimeout(()=>{
+      if(!spoke){
+        let src='';
+        if(text.match(/^[1-5]$/)) src=numMP3[parseInt(text)-1];
+        else src=dirMP3[text];
+        if(src){
+          mp3Played=true;
+          const a=audioCache[src].cloneNode(); a.volume=1; a.play();
+          a.onended=()=>res();
+        }else res(); // nothing else
       }
-      waited++;
-    },100); // poll every 100 ms
-  } else { speakNow(); }
+    },500);
+  });
 }
 
-/* --------- landing button handlers --------- */
+/* ===================== UI flow ===================== */
 landing.querySelectorAll('button[data-mode]').forEach(btn=>{
   btn.onclick=()=>{
     mode=btn.dataset.mode;
@@ -109,65 +135,52 @@ landing.querySelectorAll('button[data-mode]').forEach(btn=>{
       direction:'Audible Direction Timer'
     }[mode];
     durEl.value=''; lastVal=null; countEl.textContent='';
-    hide(landing); show(timerPage);
+    hide(landing); show(timerPg);
   };
 });
+backBtn.onclick=()=>{ hide(timerPg); show(landing); };
 
-/* back */
-backBtn.onclick=()=>{ hide(timerPage); show(landing); };
-
-/* --------- main drill --------- */
 startBtn.onclick=()=>{
   audioCtx.resume().then(()=>{
-
-    /* unlock WebSpeech on iOS by immediately speaking a hidden word */
-    speakEN('ready');
+    speak('ready');                    // unlock Web Speech on iOS
 
     const total=parseInt(durEl.value)*1000;
     if(isNaN(total)||total<=0){ alert('Enter a valid time'); return; }
-
     durEl.disabled=startBtn.disabled=backBtn.disabled=true;
+
     let c=3;
+    const finish=()=>{ playTone(250,800,'square');
+      durEl.disabled=startBtn.disabled=backBtn.disabled=false;
+      countEl.textContent=''; };
 
-    const afterCountdown=()=>{
-      countEl.textContent='Go!';
-      trigger();                        // first signal
-      const end=Date.now()+total;
-      loop(end);
-      setTimeout(()=>{ playTone(250,800,'square');
-        durEl.disabled=startBtn.disabled=backBtn.disabled=false;
-        countEl.textContent=''; },total);
-    };
-
-    const step=()=>{
-      if(c>0){ countEl.textContent=c; playTone(); c--; setTimeout(step,1000); }
-      else    { afterCountdown(); }
-    };
-
-    const loop=(end)=>{
+    const loopTrigger=end=>{
       if(Date.now()<end-400){
-        const dly=Math.random()*1500+500;   // 0.5-2 s
+        const dly=Math.random()*1500+500;
         setTimeout(()=>{
-          if(Date.now()<end-200){ trigger(); loop(end); }
+          if(Date.now()<end-200){ trigger(); loopTrigger(end); }
         },dly);
       }
     };
 
     const trigger=()=>{
-      if(mode==='clap'){ playClap(); return; }
-
+      if(mode==='clap'){ clap(); return; }
       if(mode==='number'){
         let n; do n=Math.floor(Math.random()*5)+1; while(n===lastVal);
-        lastVal=n; speakEN(String(n));
+        lastVal=n; speak(String(n));
       }
       if(mode==='direction'){
         const dirs=['right','left','back','forward'];
         let d; do d=dirs[Math.floor(Math.random()*dirs.length)]; while(d===lastVal);
-        lastVal=d; speakEN(d);
+        lastVal=d; speak(d);
       }
     };
 
-    step();
+    const countdown=()=>{
+      if(c>0){ countEl.textContent=c; playTone(); c--; setTimeout(countdown,1000);}
+      else   { countEl.textContent='Go!'; trigger();
+        const end=Date.now()+total; loopTrigger(end); setTimeout(finish,total); }
+    };
+    countdown();
   });
 };
 </script>
