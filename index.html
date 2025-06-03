@@ -22,7 +22,7 @@
 
 <!-- Landing -->
 <section id="landing" class="show">
-  <img src="vlvl16x9.png" alt="VLVL Logo" class="logo">
+  <img src="vlvl16x9.png" class="logo" alt="VLVL Logo">
   <h2>Select a Timer</h2>
   <button class="primary" data-mode="clap">Audible Clap Timer</button><br>
   <button class="primary" data-mode="number">Audible Number Timer</button><br>
@@ -31,7 +31,7 @@
 
 <!-- Timer page -->
 <section id="timer">
-  <img src="vlvl16x9.png" alt="VLVL Logo" class="logo">
+  <img src="vlvl16x9.png" class="logo" alt="VLVL Logo">
   <h1 id="title"></h1>
   <label>Training Duration (seconds):</label><br>
   <input id="duration" type="number" min="1"><br>
@@ -44,143 +44,132 @@
 <div id="ringerBar">🔈 Make sure your device's Ringer is set to ON</div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
+/* --------- constants & refs --------- */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const synth    = window.speechSynthesis;
 
-  /* ---------- references ---------- */
-  const landing  = document.getElementById('landing');
-  const timerPg  = document.getElementById('timer');
-  const titleEl  = document.getElementById('title');
-  const durEl    = document.getElementById('duration');
-  const startBtn = document.getElementById('startBtn');
-  const backBtn  = document.getElementById('backBtn');
-  const countEl  = document.getElementById('countdown');
+const landing   = document.getElementById('landing');
+const timerPage = document.getElementById('timer');
+const titleEl   = document.getElementById('title');
+const durEl     = document.getElementById('duration');
+const startBtn  = document.getElementById('startBtn');
+const backBtn   = document.getElementById('backBtn');
+const countEl   = document.getElementById('countdown');
 
-  let mode       = '';      // clap | number | direction
-  let lastVal    = null;    // last number/direction spoken
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const synth    = window.speechSynthesis;
+let mode='', lastVal=null;
 
-  /* ---------- helpers ---------- */
-  const show = s => s.classList.add('show');
-  const hide = s => s.classList.remove('show');
+/* --------- UI helpers --------- */
+const show = el => el.classList.add('show');
+const hide = el => el.classList.remove('show');
 
-  const playTone = (freq=1000,dur=200,type='sine') => {
-    const osc = audioCtx.createOscillator();
-    const g   = audioCtx.createGain();
-    osc.type = type; osc.frequency.value = freq;
-    osc.connect(g); g.connect(audioCtx.destination);
-    g.gain.setValueAtTime(1,audioCtx.currentTime);
-    osc.start(); osc.stop(audioCtx.currentTime + dur/1000);
+/* --------- simple audio helpers --------- */
+const playTone = (f=1000,d=200,t='sine') =>{
+  const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.type=t; o.frequency.value=f; o.connect(g); g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(1,audioCtx.currentTime);
+  o.start(); o.stop(audioCtx.currentTime+d/1000);
+};
+const playClap = () =>{
+  const len=audioCtx.sampleRate*0.15, buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+  const data=buf.getChannelData(0);
+  for(let i=0;i<len;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
+  const src=audioCtx.createBufferSource(); src.buffer=buf; src.connect(audioCtx.destination); src.start();
+};
+
+/* --------- robust speech (EN) --------- */
+function speakEN(text){
+  const speakNow = ()=>{
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang='en-US';         // ensure English
+    u.volume=1; u.rate=1; u.pitch=1;
+    synth.cancel();
+    // tiny timeout avoids some Chrome race conditions
+    setTimeout(()=>synth.speak(u),0);
   };
 
-  /* white-noise burst (150 ms) => clap */
-  const playClap = () => {
-    const len = audioCtx.sampleRate * 0.15;
-    const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
-    const data = buf.getChannelData(0);
-    for(let i=0;i<len;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
-    const src = audioCtx.createBufferSource();
-    src.buffer = buf; src.connect(audioCtx.destination); src.start();
-  };
+  // wait until at least one voice exists (max 2 s)
+  if(!synth.getVoices().length){
+    let waited=0;
+    const iv=setInterval(()=>{
+      if(synth.getVoices().length || waited>20){
+        clearInterval(iv); speakNow();
+      }
+      waited++;
+    },100); // poll every 100 ms
+  } else { speakNow(); }
+}
 
-  /* guaranteed English speech */
-  const speakEN = (txt) => {
-    const useVoiceAndSpeak = () => {
-      const utter = new SpeechSynthesisUtterance(txt);
-      utter.lang  = 'en-US';            // force English
-      utter.rate  = 1;  utter.pitch = 1; utter.volume = 1;
-      synth.cancel();                   // stop overlaps
-      synth.speak(utter);
+/* --------- landing button handlers --------- */
+landing.querySelectorAll('button[data-mode]').forEach(btn=>{
+  btn.onclick=()=>{
+    mode=btn.dataset.mode;
+    titleEl.textContent={
+      clap:'Audible Clap Timer',
+      number:'Audible Number Timer',
+      direction:'Audible Direction Timer'
+    }[mode];
+    durEl.value=''; lastVal=null; countEl.textContent='';
+    hide(landing); show(timerPage);
+  };
+});
+
+/* back */
+backBtn.onclick=()=>{ hide(timerPage); show(landing); };
+
+/* --------- main drill --------- */
+startBtn.onclick=()=>{
+  audioCtx.resume().then(()=>{
+
+    /* unlock WebSpeech on iOS by immediately speaking a hidden word */
+    speakEN('ready');
+
+    const total=parseInt(durEl.value)*1000;
+    if(isNaN(total)||total<=0){ alert('Enter a valid time'); return; }
+
+    durEl.disabled=startBtn.disabled=backBtn.disabled=true;
+    let c=3;
+
+    const afterCountdown=()=>{
+      countEl.textContent='Go!';
+      trigger();                        // first signal
+      const end=Date.now()+total;
+      loop(end);
+      setTimeout(()=>{ playTone(250,800,'square');
+        durEl.disabled=startBtn.disabled=backBtn.disabled=false;
+        countEl.textContent=''; },total);
     };
 
-    if (synth.getVoices().length) { useVoiceAndSpeak(); }
-    else {
-      synth.addEventListener('voiceschanged', useVoiceAndSpeak, { once:true });
-      synth.getVoices();               // some browsers need this call to trigger load
-    }
-  };
+    const step=()=>{
+      if(c>0){ countEl.textContent=c; playTone(); c--; setTimeout(step,1000); }
+      else    { afterCountdown(); }
+    };
 
-  /* ---------- landing buttons ---------- */
-  landing.querySelectorAll('button[data-mode]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      mode = btn.dataset.mode;
-      titleEl.textContent = {
-        clap:'Audible Clap Timer',
-        number:'Audible Number Timer',
-        direction:'Audible Direction Timer'
-      }[mode];
-      durEl.value = ''; lastVal = null; countEl.textContent = '';
-      hide(landing); show(timerPg);
-    });
-  });
-
-  /* ---------- back ---------- */
-  backBtn.addEventListener('click', ()=>{
-    hide(timerPg); show(landing);
-  });
-
-  /* ---------- main drill ---------- */
-  startBtn.addEventListener('click', ()=>{
-    audioCtx.resume().then(()=>{
-
-      const total = parseInt(durEl.value)*1000;
-      if(isNaN(total) || total<=0){ alert('Enter a valid time'); return; }
-
-      durEl.disabled = startBtn.disabled = backBtn.disabled = true;
-      let ct = 3;
-
-      const endBeep = () => playTone(250, 800, 'square');
-
-      const afterCountdown = () => {
-        countEl.textContent = 'Go!';
-        triggerSignal();                         // first clap / number / direction
-        const stopTime = Date.now() + total;
-        scheduleRepeats(stopTime);
+    const loop=(end)=>{
+      if(Date.now()<end-400){
+        const dly=Math.random()*1500+500;   // 0.5-2 s
         setTimeout(()=>{
-          endBeep();
-          durEl.disabled = startBtn.disabled = backBtn.disabled = false;
-          countEl.textContent = '';
-        }, total);
-      };
+          if(Date.now()<end-200){ trigger(); loop(end); }
+        },dly);
+      }
+    };
 
-      const stepCountdown = () =>{
-        if(ct>0){ countEl.textContent = ct; playTone(); ct--; setTimeout(stepCountdown,1000); }
-        else     { afterCountdown(); }
-      };
+    const trigger=()=>{
+      if(mode==='clap'){ playClap(); return; }
 
-      /* schedule repeated prompts */
-      const scheduleRepeats = (endT) => {
-        if(Date.now() < endT-400){
-          const delay = Math.random()*1500 + 500;     // 0.5–2 s
-          setTimeout(()=>{
-            if(Date.now() < endT-200){
-              triggerSignal();
-              scheduleRepeats(endT);
-            }
-          }, delay);
-        }
-      };
+      if(mode==='number'){
+        let n; do n=Math.floor(Math.random()*5)+1; while(n===lastVal);
+        lastVal=n; speakEN(String(n));
+      }
+      if(mode==='direction'){
+        const dirs=['right','left','back','forward'];
+        let d; do d=dirs[Math.floor(Math.random()*dirs.length)]; while(d===lastVal);
+        lastVal=d; speakEN(d);
+      }
+    };
 
-      /* produce the audible cue */
-      const triggerSignal = () => {
-        if(mode === 'clap'){ playClap(); return; }
-
-        if(mode === 'number'){
-          let n; do n = Math.floor(Math.random()*5)+1; while(n === lastVal);
-          lastVal = n; speakEN(String(n));
-        }
-        if(mode === 'direction'){
-          const dirs = ['right','left','back','forward'];
-          let d; do d = dirs[Math.floor(Math.random()*dirs.length)]; while(d === lastVal);
-          lastVal = d; speakEN(d);
-        }
-      };
-
-      stepCountdown();
-    });
+    step();
   });
-
-});
+};
 </script>
 </body>
 </html>
