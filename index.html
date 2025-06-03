@@ -1,156 +1,149 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reaction Drill</title>
+  <title>Audible Reaction Timers</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-      text-align: center;
-    }
-    input, button {
-      font-size: 1.2em;
-      padding: 10px;
-      margin: 5px;
-    }
-    #countdown {
-      font-size: 3em;
-      margin-top: 20px;
-    }
-    img.logo {
-      max-width: 200px;
-      height: auto;
-      margin-bottom: 15px;
-    }
-    #ringerAlert {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      background: #ff4444;
-      color: white;
-      font-weight: bold;
-      padding: 12px;
-      text-align: center;
-      font-size: 1em;
-      z-index: 999;
-    }
+    :root { --btn:#000; --btnText:#fff; --warn:#ff4444; }
+    body  { font-family:sans-serif; text-align:center; padding:20px; }
+    section      { display:none; }
+    section.show { display:block; }
+    img.logo     { max-width:200px; margin-bottom:15px; }
+    button,input { font-size:1.1em; padding:12px 22px; margin:8px; border:none; border-radius:5px; }
+    .primary     { background:var(--btn); color:var(--btnText); cursor:pointer; }
+    #countdown   { font-size:3em; margin-top:20px; }
+    #ringerBar   {position:fixed;bottom:0;left:0;width:100%;background:var(--warn);color:#fff;font-weight:bold;padding:10px;z-index:999;}
   </style>
 </head>
 <body>
-  <img src="vlvl16x9.png" alt="VLVL Logo" class="logo" />
-  <h1>Reaction Drill</h1>
-  <label for="duration">Training Duration (seconds):</label>
-  <input type="number" id="duration" min="1" />
-  <button id="startButton">Start Drill</button>
+
+<!-- Landing -->
+<section id="landing" class="show">
+  <img src="vlvl16x9.png" class="logo" alt="VLVL Logo">
+  <h2>Select a Timer</h2>
+  <button class="primary" data-mode="clap">Audible Clap Timer</button><br>
+  <button class="primary" data-mode="number">Audible Number Timer</button><br>
+  <button class="primary" data-mode="direction">Audible Direction Timer</button>
+</section>
+
+<!-- Timer Setup / Run -->
+<section id="timer">
+  <img src="vlvl16x9.png" class="logo" alt="VLVL Logo">
+  <h1 id="timerTitle"></h1>
+  <label>Training Duration (seconds):</label><br>
+  <input type="number" id="duration" min="1"><br>
+  <button id="startBtn" class="primary">Start Drill</button>
   <div id="countdown"></div>
+  <button id="backBtn" class="primary" style="margin-top:25px;">← Back</button>
+</section>
 
-  <!-- Ringer Alert Bar -->
-  <div id="ringerAlert">
-    🔈 Make sure your device's Ringer is set to ON
-  </div>
+<!-- Ringer reminder -->
+<div id="ringerBar">🔈 Make sure your device's Ringer is set to ON</div>
 
-  <script>
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+<script>
+/* ---------- basic utilities ---------- */
+const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+const synth    = window.speechSynthesis;
+const landing  = document.getElementById('landing');
+const timerSec = document.getElementById('timer');
+const titleEl  = document.getElementById('timerTitle');
+const durEl    = document.getElementById('duration');
+const startBtn = document.getElementById('startBtn');
+const backBtn  = document.getElementById('backBtn');
+const countEl  = document.getElementById('countdown');
 
-    function beep(duration, frequency, volume, type) {
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      oscillator.frequency.value = frequency || 1000;
-      oscillator.type = type || "sine";
-      gainNode.gain.value = volume || 1;
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + duration / 1000);
-    }
+let mode = '';      // clap | number | direction
+let lastVal = null; // last number/direction spoken for no-repeat rule
 
-    function playClap() {
-      const ctx = audioContext;
-      const bufferDuration = 0.2;
-      const bufferSize = ctx.sampleRate * bufferDuration;
-      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
+function show(el){ el.classList.add('show'); }
+function hide(el){ el.classList.remove('show'); }
+
+function playTone(freq=1000,dur=200,type='sine'){
+  const osc=audioCtx.createOscillator(), g=audioCtx.createGain();
+  osc.connect(g); g.connect(audioCtx.destination);
+  osc.type=type; osc.frequency.setValueAtTime(freq,audioCtx.currentTime);
+  g.gain.setValueAtTime(1,audioCtx.currentTime);
+  osc.start(); osc.stop(audioCtx.currentTime+dur/1000);
+}
+
+function playClap(){ playTone(2200,120,'square'); }
+
+function speak(text){
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 1; utter.pitch = 1;
+  synth.cancel(); synth.speak(utter);
+}
+
+/* ---------- landing buttons ---------- */
+landing.querySelectorAll('button[data-mode]').forEach(btn=>{
+  btn.onclick = ()=>{
+    mode = btn.dataset.mode;
+    titleEl.textContent = ({
+      clap:'Audible Clap Timer',
+      number:'Audible Number Timer',
+      direction:'Audible Direction Timer'
+    })[mode];
+    durEl.value='';
+    countEl.textContent='';
+    hide(landing); show(timerSec);
+  };
+});
+
+/* ---------- back ---------- */
+backBtn.onclick = ()=>{ hide(timerSec); show(landing); };
+
+/* ---------- main drill ---------- */
+startBtn.onclick = ()=>{
+  audioCtx.resume().then(()=>{
+    const totalMs = parseInt(durEl.value)*1000;
+    if(isNaN(totalMs)||totalMs<=0){ alert('Enter a valid time'); return; }
+    durEl.disabled=true; startBtn.disabled=true; backBtn.disabled=true;
+    let countdown=3;
+    function beepCnt(){
+      if(countdown>0){
+        countEl.textContent=countdown; playTone();
+        countdown--; setTimeout(beepCnt,1000);
+      }else{
+        countEl.textContent='Go!';
+        if(mode==='clap') playClap(); else triggerPrompt(); // first signal
+        const end = Date.now()+totalMs;
+        schedule(end);
+        setTimeout(()=>{
+          // finish
+          playTone(250,800,'square');
+          durEl.disabled=false; startBtn.disabled=false; backBtn.disabled=false;
+          countEl.textContent='';
+        },totalMs);
       }
-      const noiseSource = ctx.createBufferSource();
-      noiseSource.buffer = buffer;
-
-      const gainNode = ctx.createGain();
-      gainNode.gain.setValueAtTime(1, ctx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + bufferDuration);
-
-      noiseSource.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      noiseSource.start();
     }
-
-    function playBuzzer() {
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      oscillator.frequency.setValueAtTime(250, audioContext.currentTime);
-      oscillator.type = "square";
-      gainNode.gain.setValueAtTime(1, audioContext.currentTime);
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.8);
-    }
-
-    function scheduleClap(endTime) {
-      if (Date.now() < endTime - 500) {
-        const randomDelay = Math.random() * 2500 + 500; // 0.5s to 3s
-        setTimeout(() => {
-          if (Date.now() < endTime - 200) {
-            playClap();
-            scheduleClap(endTime);
+    beepCnt();
+    // core scheduling
+    function schedule(endTime){
+      if(Date.now()<endTime-400){
+        const next = Math.random()*1500+500; // 0.5-2 s
+        setTimeout(()=>{
+          if(Date.now()<endTime-200){
+            if(mode==='clap')       playClap();
+            else                    triggerPrompt();
+            schedule(endTime);
           }
-        }, randomDelay);
+        },next);
       }
     }
-
-    document.getElementById('startButton').addEventListener('click', () => {
-      audioContext.resume().then(() => {
-        const durationInput = document.getElementById('duration');
-        const totalDuration = parseInt(durationInput.value) * 1000;
-        if (isNaN(totalDuration) || totalDuration <= 0) {
-          alert('Please enter a valid duration in seconds.');
-          return;
-        }
-
-        durationInput.disabled = true;
-        document.getElementById('startButton').disabled = true;
-        const countdownElement = document.getElementById('countdown');
-        let count = 3;
-
-        function countdown() {
-          if (count > 0) {
-            countdownElement.innerText = count;
-            beep(200, 1000, 1, "sine");
-            count--;
-            setTimeout(countdown, 1000);
-          } else {
-            countdownElement.innerText = "Go!";
-            playClap(); // First clap
-            setTimeout(() => {
-              const drillEndTime = Date.now() + totalDuration;
-              scheduleClap(drillEndTime);
-              countdownElement.innerText = "";
-
-              setTimeout(() => {
-                playBuzzer();
-                durationInput.disabled = false;
-                document.getElementById('startButton').disabled = false;
-              }, totalDuration);
-            }, 300);
-          }
-        }
-
-        countdown();
-      });
-    });
-  </script>
+    function triggerPrompt(){
+      if(mode==='number'){
+        let num;
+        do{ num = Math.floor(Math.random()*5)+1; }while(num===lastVal);
+        lastVal=num; speak(String(num));
+      }else if(mode==='direction'){
+        const dirs=['right','left','back','forward'];
+        let dir;
+        do{ dir = dirs[Math.floor(Math.random()*dirs.length)]; }while(dir===lastVal);
+        lastVal=dir; speak(dir);
+      }
+    }
+  });
+};
+</script>
 </body>
 </html>
