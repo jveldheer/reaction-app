@@ -1,182 +1,186 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Audible Reaction Timers</title>
 <style>
-  :root { --btn:#000; --btnTxt:#fff; --warn:#ff4444; }
-  *     { box-sizing:border-box; }
-  body  { font-family:sans-serif; text-align:center; padding:20px; margin:0; }
+  :root { --btn:#000; --btnText:#fff; --warn:#ff4444; }
+  body  { font-family:sans-serif; text-align:center; padding:20px; }
   section      { display:none; }
   section.show { display:block; }
   img.logo     { max-width:200px; margin-bottom:15px; }
-  button,input { font-size:1.05em; padding:12px 22px; margin:8px; border:none; border-radius:6px; }
-  .primary     { background:var(--btn); color:var(--btnTxt); cursor:pointer; }
-  #duration    { border:2px solid #000; width:140px; text-align:center; }
+  button,input { font-size:1.1em; padding:12px 22px; margin:8px; border:none; border-radius:6px; }
+  .primary     { background:var(--btn); color:var(--btnText); cursor:pointer; }
+  #duration    { border:2px solid #000; width:150px; text-align:center; }
   #countdown   { font-size:3em; margin-top:20px; }
-  #ringerBar   {position:fixed;left:0;bottom:0;width:100%;background:var(--warn);color:#fff;
-                font-weight:bold;padding:10px 6px;z-index:999;}
+  #ringerBar   { position:fixed; bottom:0; left:0; width:100%; background:var(--warn);
+                 color:#fff; font-weight:bold; padding:10px; z-index:999; }
 </style>
 </head>
 <body>
 
 <!-- Landing -->
 <section id="landing" class="show">
-  <img src="vlvl16x9.png" class="logo" alt="VLVL Logo">
+  <img src="vlvl16x9.png" alt="VLVL Logo" class="logo">
   <h2>Select a Timer</h2>
-  <button class="primary modeBtn" data-mode="clap">Audible Clap Timer</button><br>
-  <button class="primary modeBtn" data-mode="number">Audible Number Timer</button><br>
-  <button class="primary modeBtn" data-mode="direction">Audible Direction Timer</button>
+  <button class="primary" data-mode="clap">Audible Clap Timer</button><br>
+  <button class="primary" data-mode="number">Audible Number Timer</button><br>
+  <button class="primary" data-mode="direction">Audible Direction Timer</button>
 </section>
 
-<!-- Timer -->
+<!-- Timer page -->
 <section id="timer">
-  <img src="vlvl16x9.png" class="logo" alt="VLVL Logo">
-  <h1 id="timerTitle"></h1>
-  <label>Training Duration (seconds)</label><br>
-  <input type="number" id="duration" min="1" /><br>
+  <img src="vlvl16x9.png" alt="VLVL Logo" class="logo">
+  <h1 id="title"></h1>
+  <label>Training Duration (seconds):</label><br>
+  <input id="duration" type="number" min="1"><br>
   <button id="startBtn" class="primary">Start Drill</button>
   <div id="countdown"></div>
-  <button id="backBtn" class="primary" style="margin-top:28px;">← Back</button>
+  <button id="backBtn" class="primary" style="margin-top:25px;">← Back</button>
 </section>
 
+<!-- Ringer reminder -->
 <div id="ringerBar">🔈 Make sure your device's Ringer is set to ON</div>
 
 <script>
-/* ---------- Basic refs ---------- */
-const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-const synth    = window.speechSynthesis;
+document.addEventListener('DOMContentLoaded', () => {
 
-let voicesReady = false;
-synth.onvoiceschanged = ()=> { voicesReady = true; };
+  /* ---------- references ---------- */
+  const landing  = document.getElementById('landing');
+  const timerPg  = document.getElementById('timer');
+  const titleEl  = document.getElementById('title');
+  const durEl    = document.getElementById('duration');
+  const startBtn = document.getElementById('startBtn');
+  const backBtn  = document.getElementById('backBtn');
+  const countEl  = document.getElementById('countdown');
 
-const landing   = document.getElementById('landing');
-const timerPage = document.getElementById('timer');
-const titleEl   = document.getElementById('timerTitle');
-const durInput  = document.getElementById('duration');
-const startBtn  = document.getElementById('startBtn');
-const backBtn   = document.getElementById('backBtn');
-const countEl   = document.getElementById('countdown');
+  let mode       = '';      // clap | number | direction
+  let lastVal    = null;    // last number/direction spoken
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const synth    = window.speechSynthesis;
 
-let mode = '';          // clap | number | direction
-let prevValue = null;   // last spoken value
-let stopFlag  = false;  // for cleanup on back
+  /* ---------- helpers ---------- */
+  const show = s => s.classList.add('show');
+  const hide = s => s.classList.remove('show');
 
-/* ---------- Helpers ---------- */
-const show  = el => el.classList.add('show');
-const hide  = el => el.classList.remove('show');
-
-function tone(f=1000, d=200, type='sine'){
-  const o=audioCtx.createOscillator(), g=audioCtx.createGain();
-  o.type=type; o.frequency.value=f;
-  o.connect(g); g.connect(audioCtx.destination);
-  g.gain.setValueAtTime(1,audioCtx.currentTime);
-  o.start(); o.stop(audioCtx.currentTime+d/1000);
-}
-
-function clap(){
-  const len=audioCtx.sampleRate*0.14; // 140 ms
-  const buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
-  const data=buf.getChannelData(0);
-  for(let i=0;i<len;i++) data[i]=(Math.random()*2-1)*(1-i/len);
-  const src=audioCtx.createBufferSource();
-  src.buffer=buf; src.connect(audioCtx.destination); src.start();
-}
-
-/* robust English speech */
-function speak(text){
-  const doSpeak = () =>{
-    const utter=new SpeechSynthesisUtterance(text);
-    utter.lang='en-US'; utter.volume=1; utter.rate=1; utter.pitch=1;
-    synth.cancel(); synth.speak(utter);
+  const playTone = (freq=1000,dur=200,type='sine') => {
+    const osc = audioCtx.createOscillator();
+    const g   = audioCtx.createGain();
+    osc.type = type; osc.frequency.value = freq;
+    osc.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(1,audioCtx.currentTime);
+    osc.start(); osc.stop(audioCtx.currentTime + dur/1000);
   };
-  if(voicesReady){ doSpeak(); }
-  else{ synth.onvoiceschanged = ()=>{ voicesReady=true; doSpeak(); }; }
-}
 
-/* ---------- Landing mode buttons ---------- */
-document.querySelectorAll('.modeBtn').forEach(btn=>{
-  btn.onclick = () =>{
-    mode = btn.dataset.mode;
-    titleEl.textContent = {
-      clap:'Audible Clap Timer',
-      number:'Audible Number Timer',
-      direction:'Audible Direction Timer'
-    }[mode];
-    durInput.value=''; prevValue=null; countEl.textContent='';
-    hide(landing); show(timerPage);
+  /* white-noise burst (150 ms) => clap */
+  const playClap = () => {
+    const len = audioCtx.sampleRate * 0.15;
+    const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for(let i=0;i<len;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf; src.connect(audioCtx.destination); src.start();
   };
-});
 
-/* ---------- Back ---------- */
-backBtn.onclick = ()=>{
-  stopFlag = true;                 // stop any running schedule
-  hide(timerPage); show(landing);
-};
-
-/* ---------- Main drill ---------- */
-startBtn.onclick = ()=>{
-  const totalMs = parseInt(durInput.value)*1000;
-  if(isNaN(totalMs)||totalMs<=0){ alert('Enter a valid time'); return; }
-
-  audioCtx.resume().then(()=>{
-    durInput.disabled = true;
-    startBtn.disabled = true;
-    backBtn.disabled  = true;
-    stopFlag          = false;
-
-    let c = 3;
-    const finish = () =>{
-      tone(250,800,'square');
-      durInput.disabled=false;
-      startBtn.disabled=false;
-      backBtn.disabled=false;
-      countEl.textContent='';
+  /* guaranteed English speech */
+  const speakEN = (txt) => {
+    const useVoiceAndSpeak = () => {
+      const utter = new SpeechSynthesisUtterance(txt);
+      utter.lang  = 'en-US';            // force English
+      utter.rate  = 1;  utter.pitch = 1; utter.volume = 1;
+      synth.cancel();                   // stop overlaps
+      synth.speak(utter);
     };
 
-    const afterCountdown = () =>{
-      if(stopFlag) return;
-      countEl.textContent='Go!';
-      trigger(); // first event
+    if (synth.getVoices().length) { useVoiceAndSpeak(); }
+    else {
+      synth.addEventListener('voiceschanged', useVoiceAndSpeak, { once:true });
+      synth.getVoices();               // some browsers need this call to trigger load
+    }
+  };
 
-      const endTime = Date.now()+totalMs;
-      schedule(endTime);
-      setTimeout(()=>!stopFlag && finish(), totalMs);
-    };
-
-    const tick = () =>{
-      if(stopFlag) return;
-      if(c>0){ countEl.textContent=c; tone(); c--; setTimeout(tick,1000); }
-      else   { afterCountdown(); }
-    };
-    tick();
+  /* ---------- landing buttons ---------- */
+  landing.querySelectorAll('button[data-mode]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      mode = btn.dataset.mode;
+      titleEl.textContent = {
+        clap:'Audible Clap Timer',
+        number:'Audible Number Timer',
+        direction:'Audible Direction Timer'
+      }[mode];
+      durEl.value = ''; lastVal = null; countEl.textContent = '';
+      hide(landing); show(timerPg);
+    });
   });
 
-  /* schedule recurring prompts until endTime */
-  function schedule(endTime){
-    if(stopFlag) return;
-    const delay = Math.random()*1500+500; // 0.5-2 s
-    if(Date.now()+delay >= endTime-200) return; // quit near end
-    setTimeout(()=>{
-      if(!stopFlag){ trigger(); schedule(endTime); }
-    }, delay);
-  }
+  /* ---------- back ---------- */
+  backBtn.addEventListener('click', ()=>{
+    hide(timerPg); show(landing);
+  });
 
-  function trigger(){
-    if(mode==='clap'){ clap(); return; }
+  /* ---------- main drill ---------- */
+  startBtn.addEventListener('click', ()=>{
+    audioCtx.resume().then(()=>{
 
-    if(mode==='number'){
-      let n;
-      do n = Math.floor(Math.random()*5)+1; while(n===prevValue);
-      prevValue = n; speak(String(n));
-    }else if(mode==='direction'){
-      const dirs=['right','left','back','forward']; let d;
-      do d = dirs[Math.floor(Math.random()*dirs.length)]; while(d===prevValue);
-      prevValue = d; speak(d);
-    }
-  }
-};
+      const total = parseInt(durEl.value)*1000;
+      if(isNaN(total) || total<=0){ alert('Enter a valid time'); return; }
+
+      durEl.disabled = startBtn.disabled = backBtn.disabled = true;
+      let ct = 3;
+
+      const endBeep = () => playTone(250, 800, 'square');
+
+      const afterCountdown = () => {
+        countEl.textContent = 'Go!';
+        triggerSignal();                         // first clap / number / direction
+        const stopTime = Date.now() + total;
+        scheduleRepeats(stopTime);
+        setTimeout(()=>{
+          endBeep();
+          durEl.disabled = startBtn.disabled = backBtn.disabled = false;
+          countEl.textContent = '';
+        }, total);
+      };
+
+      const stepCountdown = () =>{
+        if(ct>0){ countEl.textContent = ct; playTone(); ct--; setTimeout(stepCountdown,1000); }
+        else     { afterCountdown(); }
+      };
+
+      /* schedule repeated prompts */
+      const scheduleRepeats = (endT) => {
+        if(Date.now() < endT-400){
+          const delay = Math.random()*1500 + 500;     // 0.5–2 s
+          setTimeout(()=>{
+            if(Date.now() < endT-200){
+              triggerSignal();
+              scheduleRepeats(endT);
+            }
+          }, delay);
+        }
+      };
+
+      /* produce the audible cue */
+      const triggerSignal = () => {
+        if(mode === 'clap'){ playClap(); return; }
+
+        if(mode === 'number'){
+          let n; do n = Math.floor(Math.random()*5)+1; while(n === lastVal);
+          lastVal = n; speakEN(String(n));
+        }
+        if(mode === 'direction'){
+          const dirs = ['right','left','back','forward'];
+          let d; do d = dirs[Math.floor(Math.random()*dirs.length)]; while(d === lastVal);
+          lastVal = d; speakEN(d);
+        }
+      };
+
+      stepCountdown();
+    });
+  });
+
+});
 </script>
 </body>
 </html>
